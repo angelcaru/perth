@@ -1,0 +1,144 @@
+include "perth.porth"
+
+inline proc success ptr in 200 perth-response-status-set end
+
+const TODO_CAP 128 end
+memory todos sizeof(Str) TODO_CAP * end
+memory todo-count sizeof(int) end
+
+const TODO_BUF_CAP 2048 end
+memory todo-buf sizeof(u8) TODO_BUF_CAP * end
+memory todo-buf-count sizeof(int) end
+
+proc route_/ ptr ptr in
+  let req res in
+    res success
+    res "Content-Type" "text/html" perth-response-header-set
+
+    res "<!DOCTYPE html>\n"                                           perth-response-body-write
+    res "<html>\n"                                                    perth-response-body-write
+    res "    <head>\n"                                                perth-response-body-write
+    res "        <title>TODO: Perth!</title>\n"                       perth-response-body-write
+    res "        <script defer src=\"/js\"></script>\n"               perth-response-body-write
+    res "    </head>\n"                                               perth-response-body-write
+    res "    <body>\n"                                                perth-response-body-write
+    res "        <h1>TODO app</h1>\n"                                 perth-response-body-write
+    res "        <div class=\"todos\">"                               perth-response-body-write
+    0 while dup todo-count @int < do
+      let i in
+        res "<a href=\"#\" onclick=\"removeTodo(0" perth-response-body-write
+        0 while dup i < do
+          res "+1" perth-response-body-write
+          1 +
+        end drop
+        res ")\">" perth-response-body-write
+        res todos i sizeof(Str) * ptr+ @Str perth-response-body-write
+        res "</a><br>\n" perth-response-body-write
+        i 1 +
+      end
+    end drop
+    res "        </div>"                                              perth-response-body-write
+    res "        <input type=\"text\" class=\"input\"></input>\n"     perth-response-body-write
+    res "        <button onclick=\"submitTodo();\">Submit</button>\n" perth-response-body-write
+    res "    </body>\n"                                               perth-response-body-write
+    res "</html>\n"                                                   perth-response-body-write
+  end
+end
+
+proc route_/js ptr ptr in
+  let req res in
+    res success
+    res "Content-Type" "application/javascript" perth-response-header-set
+
+    res "./examples/todo-web/script.js"c perth-response-body-write-file
+  end
+end
+
+proc todo-push int ptr in
+  // NOTE: we have to copy the string because the pointer we are given is stack-allocated
+  let n s in
+    n // size
+    s // src
+    todo-buf todo-buf-count @int ptr+
+    let dst in
+      dst memcpy drop
+      n dst
+      todos todo-count @int sizeof(Str) * ptr+
+      !Str
+    end
+    
+    todo-buf-count n inc64-by
+    todo-count inc64
+  end
+end
+
+proc route_/api/new ptr ptr in
+  let req res in
+      req perth-Request.body-len ptr+ @int
+      req perth-Request.body     ptr+
+    todo-push
+
+    res 200 perth-response-status-set
+  end
+end
+
+proc route_/api/remove ptr ptr in
+  let req res in
+    res
+      req perth-Request.body-len ptr+ @int
+      res perth-Request.body     ptr+
+      try-parse-int lnot if
+        drop
+        res "invalid number" perth-response-body-write
+        400
+      else dup todo-count @int >= if*
+        drop
+        res "todo index out of bounds" perth-response-body-write
+        400
+      else
+        "Removing TODO #" puts dup print "\n" puts
+        1 + while dup todo-count @int < do
+          let i in
+            sizeof(Str) // size
+            todos i sizeof(Str) * ptr+ // src
+            todos i 1 - sizeof(Str) * ptr+ // dst
+            memcpy drop
+            i 1 +
+          end
+        end drop
+        todo-count dec64
+        200
+      end
+    perth-response-status-set
+  end
+end
+
+proc usage in
+  "Usage: "              eputs
+  0 nth_argv cstr-to-str eputs
+  " <port>\n"            eputs
+end
+
+proc main in
+  0 todo-count !int
+  "Do my homework" todo-push
+  "Write the TODO app" todo-push
+  "Do your mom" todo-push
+  PERTH_METHOD_GET  "/"           addr-of route_/        perth-route-register
+  PERTH_METHOD_GET  "/js"         addr-of route_/js      perth-route-register
+  PERTH_METHOD_POST "/api/new"    addr-of route_/api/new perth-route-register
+  PERTH_METHOD_POST "/api/remove" addr-of route_/api/remove perth-route-register
+
+  argc 2 < if
+    usage
+    "ERROR: no port provided\n" eputs
+    1 exit
+  end
+  INADDR_LOCAL
+  1 nth_argv cstr-to-str try-parse-int lnot if
+    usage
+    "ERROR: invalid port\n" eputs
+    1 exit
+  end
+  perth-start
+end

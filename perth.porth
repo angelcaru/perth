@@ -1,0 +1,492 @@
+include "std.porth"
+
+// enum Method
+const PERTH_METHOD_GET  1 offset end
+const PERTH_METHOD_POST 1 offset end
+const PERTH_METHOD_COUNT reset end
+const sizeof(perth-Method) sizeof(int) end
+
+// struct Route
+const perth-Route.method sizeof(perth-Method) offset end
+const perth-Route.route sizeof(Str) offset end
+const perth-Route.handler sizeof(addr) offset end
+const sizeof(perth-Route) reset end
+
+// struct Header
+const perth-Header.key sizeof(Str) offset end
+const perth-Header.value sizeof(Str) offset end
+const sizeof(perth-Header) reset end
+
+// struct Response
+const PERTH_MAX_HEADERS 1024 end
+// Who would ever need more than 2KB for a web page amirite?
+const PERTH_MAX_RESPONSE_BODY_LEN 2048 end
+const perth-Response.status       sizeof(int)                              offset end
+const perth-Response.headers      sizeof(perth-Header) PERTH_MAX_HEADERS * offset end
+const perth-Response.header-count sizeof(int)                              offset end
+const perth-Response.body         sizeof(u8) PERTH_MAX_RESPONSE_BODY_LEN * offset end
+const perth-Response.body-len     sizeof(int)                              offset end
+const sizeof(perth-Response) reset end
+
+inline proc perth-response-status-set
+  ptr // response
+  int // status
+in 
+  swap perth-Response.status ptr+ !int
+end
+
+inline proc perth-response-header-push
+  ptr // response
+  int ptr // header name
+  int ptr // header contents
+in
+  let res name-len name-data content-len content-data in
+    res perth-Response.header-count ptr+
+    dup @int PERTH_MAX_HEADERS >= if here eputs ": Header overflow" eputs 1 exit end
+      res perth-Response.headers ptr+
+      over @int sizeof(perth-Header) *
+    ptr+ // pointer to header
+
+    dup
+      perth-Header.key ptr+
+      name-len name-data rot
+    !Str
+    dup
+      perth-Header.value ptr+
+      content-len content-data rot
+    !Str drop drop
+    
+    res perth-Response.header-count ptr+ inc64
+  end
+end
+
+proc perth-response-header-set
+  ptr // response
+  int ptr // header name
+  int ptr // header contents
+in
+  memory found sizeof(bool) end
+  false found !bool
+
+  peek res _ _ _ _ in res end
+  perth-Response.header-count ptr+ @int
+  let res name-len name-data content-len content-data header-count in
+    0 while
+      peek i in
+        i header-count >= if false else
+          res
+            perth-Response.headers ptr+
+            i sizeof(perth-Header) *
+            ptr+
+          let header in
+            header perth-Header.key ptr+ @Str
+            name-len name-data streq if
+                content-len content-data
+                header perth-Header.value ptr+
+              !Str
+              true found !bool
+              false // break
+            else
+              true // continue
+            end
+          end
+        end
+      end
+    do 1 + end drop
+    found @bool lnot if // Did we find it inside the loop?
+      // If not, just push it to the end
+      res name-len name-data content-len content-data perth-response-header-push
+    end
+  end
+end
+
+proc perth-response-body-write
+  ptr // response
+  int ptr // the stuff
+in 
+  let res data-len data-ptr in
+    data-len // size
+    data-ptr // src
+        res perth-Response.body-len ptr+ @int                        // dst
+        dup data-len + PERTH_MAX_RESPONSE_BODY_LEN >
+          if here eputs ": Response body overflow\n" eputs 1 exit end
+      res perth-Response.body ptr+ +ptr
+    memcpy drop
+
+    res perth-Response.body-len ptr+
+    data-len inc64-by
+  end
+end
+
+inline proc perth-response-body-write-file
+  ptr // response
+  ptr // file path (cstr)
+in
+  map-file perth-response-body-write
+end
+
+proc perth-response-body-write-u64
+  ptr // response
+  int // the number
+in
+  let res data in
+    data while dup 0 > do
+      dup 10 % '0' +
+          res perth-Response.body-len ptr+ @int                        // dst
+          dup 1 + PERTH_MAX_RESPONSE_BODY_LEN >
+            if here eputs ": Response body overflow\n" eputs 1 exit end
+        res perth-Response.body ptr+ +ptr
+      !8
+
+      res perth-Response.body-len ptr+ inc64
+      10 /
+    end drop
+  end
+end
+
+// ROUTER
+const PERTH_MAX_ROUTES 1024 end
+memory perth-routes sizeof(perth-Route) PERTH_MAX_ROUTES * end
+memory perth-route-count sizeof(int) end
+
+proc perth-route-push
+  ptr // ptr to perth-Route
+in
+  perth-routes
+    perth-route-count @int
+    dup PERTH_MAX_ROUTES >= if here eputs ": Route overflow\n" eputs 1 exit end
+    sizeof(perth-Route) *
+  ptr+
+  
+  sizeof(perth-Route) rot rot memcpy drop
+  perth-route-count inc64
+end
+
+proc perth-route-register
+  int // method
+  int ptr // route
+  addr // handler
+in
+  memory route sizeof(perth-Route) end
+  let method route-len route-data handler in
+    method               route perth-Route.method  ptr+ !int
+    route-len route-data route perth-Route.route   ptr+ !Str
+    handler              route perth-Route.handler ptr+ !addr
+  end
+
+  route perth-route-push
+end
+
+// struct Request
+const PERTH_MAX_REQUEST_SIZE 1024 1024 * end
+const perth-Request.method        sizeof(perth-Method)                     offset end
+const perth-Request.route         sizeof(Str)                              offset end
+const perth-Request.headers       sizeof(perth-Header) PERTH_MAX_HEADERS * offset end
+const perth-Request.header-count  sizeof(int)                              offset end
+const perth-Request.body          sizeof(u8)      PERTH_MAX_REQUEST_SIZE * offset end
+const perth-Request.body-len      sizeof(int)                              offset end
+const sizeof(perth-Request) reset end
+
+// Handler
+inline proc perth-handler-dummy ptr ptr in drop drop end
+
+// Parsing and sending requests and responses
+proc perth-method-parse int ptr -- int in
+  assert "Exhaustive handling of HTTP methods" PERTH_METHOD_COUNT 2 = end
+  let n s in
+         n s "GET"  streq if  PERTH_METHOD_GET
+    else n s "POST" streq if* PERTH_METHOD_POST
+    else here eputs ": TODO: send status code 418 here" eputs 1 exit 69 end
+  end
+end
+
+inline proc perth-request-header-push
+  ptr // request
+  int ptr // header name
+  int ptr // header contents
+in
+  let req name-len name-data content-len content-data in
+    req perth-Request.header-count ptr+
+    dup @int PERTH_MAX_HEADERS >= if 
+      drop
+      here eputs ": WARNING: Header overflow (won't parse any more headers from this request)\n" eputs
+    else
+      dup inc64
+        req perth-Request.headers ptr+
+        over @int 1 - sizeof(perth-Header) *
+      ptr+ // pointer to header
+
+      dup
+        perth-Header.key ptr+
+        name-len name-data rot
+      !Str
+      dup
+        perth-Header.value ptr+
+        content-len content-data rot
+      !Str drop drop
+    end
+  end
+end
+
+proc perth-request-headers-parse
+  int ptr // string
+  ptr // request
+  --
+  int ptr // rest of string
+in
+  memory str-tmp sizeof(Str) end
+  let n s req in
+    n s while dup @8 '\r' != do
+      '\n' str-chop-by-delim-2
+      let n2 s2 n1 s1 in
+        n2 s2
+        n1 1 - s1
+      end
+      let n2 s2 n1 s1 in
+        n1 s1 ':' str-chop-by-delim-2
+        let val-len val-data key-len key-data in
+          req
+          key-len key-data
+          val-len val-data str-tmp !Str
+            str-tmp str-trim-left
+          str-tmp @Str
+          perth-request-header-push
+        end
+        n2 s2
+      end
+    end
+  end
+end
+
+proc perth-request-parse
+  int ptr // string
+  ptr // dst
+in
+  // method & route
+  let n s req in
+    n s ' ' str-chop-by-delim-2
+    perth-method-parse req perth-Request.method ptr+ !int
+    '/' str-chop-by-delim-2 drop drop let n s in
+      n 1 +
+      s 1 ptr-
+    end
+    req
+  end
+  let n s req in
+    n s ' ' str-chop-by-delim-2 "\n" puts
+    req perth-Request.route ptr+ !Str
+    req
+  end
+  let n s req in
+    n s '\n' str-chop-by-delim-2 drop drop
+    req perth-request-headers-parse
+    req
+  end
+  let n s req in
+    n 2 - req perth-Request.body-len ptr+ !int
+    n 2 -
+    s 2 ptr+
+    req perth-Request.body ptr+
+    memcpy drop
+  end
+end
+
+proc perth-request-header-get
+  ptr // request
+  int ptr // key
+  --
+  int ptr // value
+in
+  memory result sizeof(Str) end
+  0 NULL result !Str
+
+  peek req _ _ in
+    req perth-Request.header-count ptr+ @int
+  end
+
+  let req n s header-count in
+    0 while
+      peek i in
+        i header-count >= if false else
+          req perth-Request.headers ptr+
+          let header in
+            header perth-Header.key ptr+ @Str
+            n s
+            streq if
+              header perth-Header.value ptr+ @Str
+              result !Str
+              false // break
+            else
+              true // continue
+            end
+          end
+        end
+      end
+    do 1 + end drop
+  end
+  result @Str
+end
+
+
+proc perth-response-init
+  ptr // dst
+in
+  let res in
+    res 418 perth-response-status-set
+
+    res "Server"       "Perth"      perth-response-header-set
+    res "Content-Type" "text/plain" perth-response-header-set
+    res "Connection"   "close"      perth-response-header-set
+
+    0 res perth-Response.body-len ptr+ !int
+  end
+end
+
+memory INTERNAL_perth-fputres-buf BFD_CAP end
+proc perth-fputres
+  int // fd
+  ptr // response
+in
+  memory bfd sizeof(Bfd) end
+  let fd res in
+    fd bfd Bfd.fd ptr+ !int
+    INTERNAL_perth-fputres-buf bfd Bfd.buff ptr+ !ptr
+    0 bfd Bfd.size ptr+ !int
+    "HTTP/1.1 " bfd bputs
+    res perth-Response.status ptr+ @int bfd bputu
+    " TODO\r\n" bfd bputs
+
+    res perth-Response.headers ptr+
+    res perth-Response.header-count ptr+ @int
+    let headers header-count in
+      0 while dup header-count < do
+        headers over sizeof(perth-Header) * ptr+
+        let header in
+          header perth-Header.key ptr+ @Str bfd bputs
+          ": " bfd bputs
+          header perth-Header.value ptr+ @Str bfd bputs
+          "\r\n" bfd bputs
+        end
+        1 +
+      end drop
+    end
+
+    "\r\n" bfd bputs
+    res perth-Response.body-len ptr+ @int
+    res perth-Response.body     ptr+
+    bfd bputs
+  end
+  bfd bflush
+end
+
+// Start
+const PERTH_BACKLOG 5 end
+proc perth-start
+  int // ip
+  int // port
+in
+  // Copy-pasted from the examples (with slight tweaks)
+  memory servaddr sizeof(sockaddr) end
+  memory cliaddr sizeof(sockaddr) end
+  memory clilen sizeof(u32) end
+  memory client_buf PERTH_MAX_REQUEST_SIZE end
+  memory curr-request sizeof(perth-Request) end
+  memory curr-response sizeof(perth-Response) end
+  memory ?handled sizeof(bool) end
+
+  0 SOCK_STREAM AF_INET socket
+  let ip port fd in
+    fd 0 < if
+      "ERROR: could not create TCP socket\n" eputs
+      1 exit
+    end
+
+    "Successfully created a socket: " puts
+    fd                                putu
+    "\n"                              puts
+
+    sizeof(sockaddr) 0 servaddr memset drop
+    AF_INET    servaddr sockaddr_in.sin_family ptr+ !16
+    ip         servaddr sockaddr_in.sin_addr   ptr+ !32
+    port htons servaddr sockaddr_in.sin_port   ptr+ !16
+
+    sizeof(sockaddr) servaddr fd bind dup 0 < if
+      "ERROR: could not bind the socket (errno " eputs
+      neg eputu
+      ")\n" eputs
+      1 exit 0
+    end drop
+
+    "Successfully bound the socket to port " puts
+    port                                     putu
+    "\n"                                     puts
+
+    PERTH_BACKLOG fd listen 0 < if
+      "ERROR: could not start listening\n" eputs
+      1 exit
+    end
+
+    "Successfully started listening\n" puts
+
+    while
+      clilen cliaddr fd accept
+      let connfd in
+        connfd 0 < if
+          "ERROR: server accept failed\n" eputs
+          1 exit
+        end
+
+        "Server accepted the client\n" puts
+
+        PERTH_MAX_REQUEST_SIZE client_buf connfd read
+        let client_buf_size in
+          client_buf_size 0 < if
+            "ERROR: could not read the client request\n" eputs
+            1 exit
+          end
+
+          client_buf_size client_buf curr-request perth-request-parse
+                      "\"" puts
+                      curr-request perth-Request.body-len ptr+ @int
+                      curr-request perth-Request.body ptr+
+                      "\"\n" puts
+                      puts
+
+          false ?handled !bool
+          0 while
+            peek i in
+              i perth-route-count @int >= if false else
+                perth-routes i sizeof(perth-Route) * ptr+
+                let route in
+                    route perth-Route.route ptr+ @Str
+                    curr-request perth-Request.route ptr+ @Str
+                  streq if
+                      curr-request
+                      curr-response dup perth-response-init
+                    route perth-Route.handler ptr+ @addr call-like perth-handler-dummy
+//                  stdout curr-response perth-fputres
+                    connfd curr-response perth-fputres
+                    true ?handled !bool
+                    false // break
+                  else
+                    true // continue
+                  end
+                end
+              end
+            end
+          do 1 + end drop
+          ?handled @bool lnot if
+            curr-response perth-response-init
+            curr-response 404 perth-response-status-set
+            stdout curr-response perth-fputres
+            connfd curr-response perth-fputres
+          end
+        end
+        connfd close drop
+      end
+      true
+    do end
+
+    fd close drop
+  end
+end
