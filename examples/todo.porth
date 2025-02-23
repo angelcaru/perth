@@ -1,6 +1,6 @@
 include "perth.porth"
 
-inline proc success ptr in 200 perth-response-status-set end
+inline proc success ptr in 200 perth::response-status-set end
 
 const TODO_CAP 128 end
 memory todos sizeof(Str) TODO_CAP * end
@@ -13,44 +13,44 @@ memory todo-buf-count sizeof(int) end
 proc route_/ ptr ptr in
   let req res in
     res success
-    res "Content-Type" "text/html" perth-response-header-set
+    res "Content-Type" "text/html" perth::response-header-set
 
-    res "<!DOCTYPE html>\n"                                           perth-response-body-write
-    res "<html>\n"                                                    perth-response-body-write
-    res "    <head>\n"                                                perth-response-body-write
-    res "        <title>TODO: Perth!</title>\n"                       perth-response-body-write
-    res "        <script defer src=\"/js\"></script>\n"               perth-response-body-write
-    res "    </head>\n"                                               perth-response-body-write
-    res "    <body>\n"                                                perth-response-body-write
-    res "        <h1>TODO app</h1>\n"                                 perth-response-body-write
-    res "        <div class=\"todos\">"                               perth-response-body-write
+    res "<!DOCTYPE html>\n"                                           perth::response-body-write
+    res "<html>\n"                                                    perth::response-body-write
+    res "    <head>\n"                                                perth::response-body-write
+    res "        <title>TODO: Perth!</title>\n"                       perth::response-body-write
+    res "        <script defer src=\"/js\"></script>\n"               perth::response-body-write
+    res "    </head>\n"                                               perth::response-body-write
+    res "    <body>\n"                                                perth::response-body-write
+    res "        <h1>TODO app</h1>\n"                                 perth::response-body-write
+    res "        <div class=\"todos\">"                               perth::response-body-write
     0 while dup todo-count @int < do
       let i in
-        res "<a href=\"#\" onclick=\"removeTodo(0" perth-response-body-write
+        res "<a href=\"#\" onclick=\"removeTodo(0" perth::response-body-write
         0 while dup i < do
-          res "+1" perth-response-body-write
+          res "+1" perth::response-body-write
           1 +
         end drop
-        res ")\">" perth-response-body-write
-        res todos i sizeof(Str) * ptr+ @Str perth-response-body-write
-        res "</a><br>\n" perth-response-body-write
+        res ")\">" perth::response-body-write
+        res todos i sizeof(Str) * ptr+ @Str perth::response-body-write
+        res "</a><br>\n" perth::response-body-write
         i 1 +
       end
     end drop
-    res "        </div>"                                              perth-response-body-write
-    res "        <input type=\"text\" class=\"input\"></input>\n"     perth-response-body-write
-    res "        <button onclick=\"submitTodo();\">Submit</button>\n" perth-response-body-write
-    res "    </body>\n"                                               perth-response-body-write
-    res "</html>\n"                                                   perth-response-body-write
+    res "        </div>"                                              perth::response-body-write
+    res "        <input type=\"text\" class=\"input\"></input>\n"     perth::response-body-write
+    res "        <button onclick=\"submitTodo();\">Submit</button>\n" perth::response-body-write
+    res "    </body>\n"                                               perth::response-body-write
+    res "</html>\n"                                                   perth::response-body-write
   end
 end
 
 proc route_/js ptr ptr in
   let req res in
     res success
-    res "Content-Type" "application/javascript" perth-response-header-set
+    res "Content-Type" "application/javascript" perth::response-header-set
 
-    res "./examples/todo-web/script.js"c perth-response-body-write-file
+    res "./examples/todo-web/script.js"c perth::response-body-write-file
   end
 end
 
@@ -74,26 +74,26 @@ end
 
 proc route_/api/new ptr ptr in
   let req res in
-      req perth-Request.body-len ptr+ @int
-      req perth-Request.body     ptr+
+      req perth::Request.body-len ptr+ @int
+      req perth::Request.body     ptr+
     todo-push
 
-    res 200 perth-response-status-set
+    res 200 perth::response-status-set
   end
 end
 
 proc route_/api/remove ptr ptr in
   let req res in
     res
-      req perth-Request.body-len ptr+ @int
-      res perth-Request.body     ptr+
+      req perth::Request.body-len ptr+ @int
+      res perth::Request.body     ptr+
       try-parse-int lnot if
         drop
-        res "invalid number" perth-response-body-write
+        res "invalid number" perth::response-body-write
         400
       else dup todo-count @int >= if*
         drop
-        res "todo index out of bounds" perth-response-body-write
+        res "todo index out of bounds" perth::response-body-write
         400
       else
         "Removing TODO #" puts dup print "\n" puts
@@ -109,7 +109,7 @@ proc route_/api/remove ptr ptr in
         todo-count dec64
         200
       end
-    perth-response-status-set
+    perth::response-status-set
   end
 end
 
@@ -124,10 +124,10 @@ proc main in
   "Do my homework" todo-push
   "Write the TODO app" todo-push
   "Do your mom" todo-push
-  PERTH_METHOD_GET  "/"           addr-of route_/        perth-route-register
-  PERTH_METHOD_GET  "/js"         addr-of route_/js      perth-route-register
-  PERTH_METHOD_POST "/api/new"    addr-of route_/api/new perth-route-register
-  PERTH_METHOD_POST "/api/remove" addr-of route_/api/remove perth-route-register
+  perth::METHOD_GET  "/"           addr-of route_/        perth::route-register
+  perth::METHOD_GET  "/js"         addr-of route_/js      perth::route-register
+  perth::METHOD_POST "/api/new"    addr-of route_/api/new perth::route-register
+  perth::METHOD_POST "/api/remove" addr-of route_/api/remove perth::route-register
 
   argc 2 < if
     usage
@@ -140,5 +140,5 @@ proc main in
     "ERROR: invalid port\n" eputs
     1 exit
   end
-  perth-start
+  perth::start
 end

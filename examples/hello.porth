@@ -5,14 +5,14 @@ proc route_/
   ptr // response
 in
   let req res in
-    res "Content-Type" "text/html" perth-response-header-set
-    res 200 perth-response-status-set
+    res "Content-Type" "text/html" perth::response-header-set
+    res 200 perth::response-status-set
 
-    res "<h1>Hello, Perth!</h1>" perth-response-body-write
+    res "<h1>Hello, Perth!</h1>" perth::response-body-write
   end
 end
 
 proc main in
-  PERTH_METHOD_GET "/" addr-of route_/ perth-route-register
-  INADDR_LOCAL 6969 perth-start
+  perth::METHOD_GET "/" addr-of route_/ perth::route-register
+  INADDR_LOCAL 6969 perth::start
 end

@@ -7,42 +7,42 @@ proc route_/
   ptr // response
 in
   let req res in
-    res "Content-Type" "text/html" perth-response-header-set
-    res 200 perth-response-status-set
+    res "Content-Type" "text/html" perth::response-header-set
+    res 200 perth::response-status-set
 
-    res "<h1>Hello, Perth!</h1>\n"                               perth-response-body-write
-    res "<button onclick=\"inc()\">Increment counter</button>\n" perth-response-body-write
-    res "<p>Current count: "                                     perth-response-body-write
-//    res counter @int perth-response-body-write-u64
-    res "<span id='count'></span>"                               perth-response-body-write
-    res "</p>\n"                                                 perth-response-body-write
-    res "<script>\n"                                             perth-response-body-write
-    res "   document.querySelector('#count').innerHTML = ("      perth-response-body-write
+    res "<h1>Hello, Perth!</h1>\n"                               perth::response-body-write
+    res "<button onclick=\"inc()\">Increment counter</button>\n" perth::response-body-write
+    res "<p>Current count: "                                     perth::response-body-write
+//    res counter @int perth::response-body-write-u64
+    res "<span id='count'></span>"                               perth::response-body-write
+    res "</p>\n"                                                 perth::response-body-write
+    res "<script>\n"                                             perth::response-body-write
+    res "   document.querySelector('#count').innerHTML = ("      perth::response-body-write
     0 while dup counter @int < do
-      res "+1" perth-response-body-write
+      res "+1" perth::response-body-write
       1 +
     end drop
-    res ").toString()\n"                                         perth-response-body-write
-    res "   function inc() {\n"                                  perth-response-body-write
-    res "       fetch('/inc').then(() => location.reload());\n"  perth-response-body-write
-    res "   }\n"                                                 perth-response-body-write
-    res "</script>\n"                                            perth-response-body-write
+    res ").toString()\n"                                         perth::response-body-write
+    res "   function inc() {\n"                                  perth::response-body-write
+    res "       fetch('/inc').then(() => location.reload());\n"  perth::response-body-write
+    res "   }\n"                                                 perth::response-body-write
+    res "</script>\n"                                            perth::response-body-write
   end
 end
 
 proc route_/inc ptr ptr in
   counter inc64
   let req res in
-    res "Content-Type" "text/plain" perth-response-header-set
-    res 200 perth-response-status-set
+    res "Content-Type" "text/plain" perth::response-header-set
+    res 200 perth::response-status-set
 
-    res "ok\n" perth-response-body-write
+    res "ok\n" perth::response-body-write
   end
 end
 
 proc main in
   1 counter !int
-  PERTH_METHOD_GET "/"    addr-of route_/    perth-route-register
-  PERTH_METHOD_GET "/inc" addr-of route_/inc perth-route-register
-  INADDR_LOCAL 6969 perth-start
+  perth::METHOD_GET "/"    addr-of route_/    perth::route-register
+  perth::METHOD_GET "/inc" addr-of route_/inc perth::route-register
+  INADDR_LOCAL 6969 perth::start
 end
