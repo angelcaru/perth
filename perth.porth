@@ -273,7 +273,7 @@ in
     req
   end
   let n s req in
-    n s ' ' str-chop-by-delim-2 "\n" puts
+    n s ' ' str-chop-by-delim-2
     req perth::Request.route ptr+ !Str
     req
   end
@@ -436,8 +436,6 @@ in
           1 exit
         end
 
-        "Server accepted the client\n" puts
-
         perth::MAX_REQUEST_SIZE client_buf connfd read
         let client_buf_size in
           client_buf_size 0 < if
@@ -446,11 +444,6 @@ in
           end
 
           client_buf_size client_buf curr-request perth::request-parse
-                      "\"" puts
-                      curr-request perth::Request.body-len ptr+ @int
-                      curr-request perth::Request.body ptr+
-                      "\"\n" puts
-                      puts
 
           false ?handled !bool
           0 while
@@ -478,7 +471,7 @@ in
           ?handled @bool lnot if
             curr-response perth::response-init
             curr-response 404 perth::response-status-set
-            stdout curr-response perth::fputres
+            //stdout curr-response perth::fputres
             connfd curr-response perth::fputres
           end
         end

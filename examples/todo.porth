@@ -96,7 +96,7 @@ proc route_/api/remove ptr ptr in
         res "todo index out of bounds" perth::response-body-write
         400
       else
-        "Removing TODO #" puts dup print "\n" puts
+        "Removing TODO #" puts dup print
         1 + while dup todo-count @int < do
           let i in
             sizeof(Str) // size
