@@ -381,6 +381,9 @@ end
 
 // Start
 const perth::BACKLOG 5 end
+const perth::SO_REUSEADDR 2 end
+const perth::SOL_SOCKET 1 end
+
 proc perth::start
   int // ip
   int // port
@@ -393,6 +396,7 @@ in
   memory curr-request sizeof(perth::Request) end
   memory curr-response sizeof(perth::Response) end
   memory ?handled sizeof(bool) end
+  memory sockopt sizeof(u32) end
 
   0 SOCK_STREAM AF_INET socket
   let ip port fd in
@@ -409,6 +413,20 @@ in
     AF_INET    servaddr sockaddr_in.sin_family ptr+ !16
     ip         servaddr sockaddr_in.sin_addr   ptr+ !32
     port htons servaddr sockaddr_in.sin_port   ptr+ !16
+
+    1 sockopt !32
+
+    sizeof(u32)         // optlen
+    sockopt             // optval
+    perth::SO_REUSEADDR // optname
+    perth::SOL_SOCKET   // level
+    fd                  // sockfd
+    SYS_setsockopt syscall5 dup 0 < if
+      "ERROR: could not set SO_REUSEADDR on the socket (errno " eputs
+      neg eputu
+      ")\n" eputs
+      1 exit 0
+    end drop
 
     sizeof(sockaddr) servaddr fd bind dup 0 < if
       "ERROR: could not bind the socket (errno " eputs
