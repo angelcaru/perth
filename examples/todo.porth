@@ -86,7 +86,7 @@ proc route_/api/remove ptr ptr in
   let req res in
     res
       req perth::Request.body-len ptr+ @int
-      res perth::Request.body     ptr+
+      req perth::Request.body     ptr+
       try-parse-int lnot if
         drop
         res "invalid number" perth::response-body-write
