@@ -262,6 +262,7 @@ proc perth::request-parse
   int ptr // string
   ptr // dst
 in
+  sizeof(perth::Request) swap 0 swap memset
   // method & route
   let n s req in
     n s ' ' str-chop-by-delim-2
@@ -333,12 +334,12 @@ proc perth::response-init
 in
   let res in
     res 418 perth::response-status-set
+    0 res perth::Response.body-len ptr+ !int
+    0 res perth::Response.header-count ptr+ !int
 
     res "Server"       "Perth"      perth::response-header-set
     res "Content-Type" "text/plain" perth::response-header-set
     res "Connection"   "close"      perth::response-header-set
-
-    0 res perth::Response.body-len ptr+ !int
   end
 end
 
